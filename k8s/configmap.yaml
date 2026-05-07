@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: devops-app
+data:
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres-service
+  DB_PORT: "5432"
+  DB_DATABASE: appdb
+  DB_USERNAME: appuser
+  APP_ENV: local
+  APP_DEBUG: "true"
+  APP_URL: http://localhost:8000

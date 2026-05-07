@@ -1,20 +1,12 @@
-FROM node:20-alpine
-
-# On définit le dossier où sera stocké le code dans le conteneur
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# On copie d'abord les fichiers de dépendances
 COPY package*.json ./
-
-# On installe les outils nécessaires (npm)
 RUN npm install
-
-# On copie tout le reste du code source
 COPY . .
+RUN npm run build
 
-# On expose le port 5173 utilisé par Vite
-EXPOSE 5173
-
-# On lance le serveur de développement avec l'option --host 
-# pour que le conteneur accepte les connexions venant de ton PC
-CMD ["npm", "run", "dev", "--", "--host"]
+FROM nginx:1.27-alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
