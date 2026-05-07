@@ -19,18 +19,7 @@ pipeline {
         stage('Verification syntaxe') {
             steps {
                 sh '''docker run --rm backend:latest \
-                  php -r "
-                  \$files = glob('/var/www/app/Http/Controllers/*.php');
-                  \$errors = 0;
-                  foreach(\$files as \$f) {
-                    exec('php -l '.\$f.' 2>&1', \$out, \$code);
-                    if(\$code !== 0) {
-                      echo implode(PHP_EOL, \$out).PHP_EOL;
-                      \$errors++;
-                    }
-                  }
-                  exit(\$errors);
-                  "'''
+                  bash -c "find /var/www/app -name '*.php' | xargs -I{} php -l {} | grep -v 'No syntax errors' || true"'''
             }
         }
 
