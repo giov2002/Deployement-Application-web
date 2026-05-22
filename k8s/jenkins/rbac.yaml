@@ -1,12 +1,164 @@
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+# ============================================================
+# SERVICEACCOUNT — Identité dédiée pour Jenkins
+# ============================================================
+# Un ServiceAccount est une identité pour les pods dans K8s
+# Par défaut, tous les pods utilisent le ServiceAccount "default"
+# qui a souvent trop de droits
+#
+# On crée un ServiceAccount DÉDIÉ à Jenkins
+# avec UNIQUEMENT les droits dont il a besoin
+# Principe du moindre privilège
+# ============================================================
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: jenkins-admin
+  name: jenkins-sa              # Nom du ServiceAccount
+  namespace: devops-app         # Limité au namespace devops-app
+---
+# ============================================================
+# ROLE — Ce que Jenkins a le droit de faire
+# ============================================================
+# Role = limité à UN namespace (devops-app)
+# ClusterRole = accès à TOUT le cluster
+#
+# On utilise Role et non ClusterRole car Jenkins
+# n'a besoin d'agir QUE dans devops-app
+# ============================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-role
+  namespace: devops-app
+rules:
+  # --------------------------------------------------------
+  # Deployments — Jenkins doit pouvoir déployer
+  # --------------------------------------------------------
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs:
+      - get        # Lire l'état d'un deployment
+      - list       # Lister tous les deployments
+      - update     # Mettre à jour un deployment
+      - patch      # Modifier partiellement un deployment
+                   # kubectl rollout restart utilise patch
+
+  # --------------------------------------------------------
+  # Pods — Jenkins doit pouvoir exécuter des commandes
+  # --------------------------------------------------------
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs:
+      - get        # Lire l'état d'un pod
+      - list       # Lister les pods
+
+  # --------------------------------------------------------
+  # Pods/exec — Jenkins doit pouvoir faire kubectl exec
+  # --------------------------------------------------------
+  # kubectl exec deployment/backend -- php artisan migrate
+  # nécessite cette permission séparément
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs:
+      - create     # Créer une session exec dans un pod
+
+  # --------------------------------------------------------
+  # Pods/log — Jenkins doit pouvoir lire les logs
+  # --------------------------------------------------------
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs:
+      - get        # Lire les logs d'un pod
+      - list
+
+  # --------------------------------------------------------
+  # Services — Jenkins doit pouvoir appliquer les services
+  # --------------------------------------------------------
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs:
+      - get
+      - list
+      - create     # Créer un service si inexistant
+      - update
+      - patch
+
+  # --------------------------------------------------------
+  # ConfigMaps — Jenkins doit pouvoir appliquer les configs
+  # --------------------------------------------------------
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - patch
+
+  # --------------------------------------------------------
+  # Secrets — Jenkins doit pouvoir appliquer les secrets
+  # --------------------------------------------------------
+  # Attention : limiter au maximum l'accès aux secrets
+  # Ici on autorise uniquement create/update pour le déploiement
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - patch
+
+  # --------------------------------------------------------
+  # Namespaces — Jenkins doit pouvoir appliquer le namespace
+  # --------------------------------------------------------
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs:
+      - get
+      - list
+
+  # --------------------------------------------------------
+  # Ingress — Jenkins doit pouvoir appliquer l'ingress
+  # --------------------------------------------------------
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - patch
+
+  # --------------------------------------------------------
+  # ReplicaSets — nécessaire pour rollout status
+  # --------------------------------------------------------
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs:
+      - get
+      - list
+---
+# ============================================================
+# ROLEBINDING — Lier le Role au ServiceAccount
+# ============================================================
+# RoleBinding = lie un Role à un ServiceAccount
+# dans UN namespace spécifique
+#
+# ClusterRoleBinding = lie un ClusterRole
+# à travers TOUT le cluster
+#
+# On utilise RoleBinding car tout est dans devops-app
+# ============================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-rolebinding
+  namespace: devops-app
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: jenkins-sa              # Le ServiceAccount créé plus haut
     namespace: devops-app
 roleRef:
-  kind: ClusterRole
+  kind: Role                      # Role et non ClusterRole
   apiGroup: rbac.authorization.k8s.io
-  name: cluster-admin
+  name: jenkins-role              # Le Role créé plus haut

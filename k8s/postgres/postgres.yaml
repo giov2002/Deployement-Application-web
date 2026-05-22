@@ -16,6 +16,7 @@ metadata:
   name: postgres-service
   namespace: devops-app
 spec:
+  type: ClusterIP
   selector:
     app: postgres
   ports:
@@ -39,20 +40,56 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: postgres:15-alpine
           env:
             - name: POSTGRES_DB
-              value: appdb
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: DB_DATABASE
             - name: POSTGRES_USER
-              value: appuser
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: DB_USERNAME
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: app-secrets
                   key: DB_PASSWORD
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - giovanni
+                - -d
+                - pos_system
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - giovanni
+                - -d
+                - pos_system
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
+              subPath: postgres
       volumes:
         - name: postgres-storage
           persistentVolumeClaim:
