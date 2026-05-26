@@ -212,7 +212,20 @@ pipeline {
                 // manuellement (kubectl apply -f k8s/namespace.yaml et rbac.yaml)
                 // car namespace = ressource cluster-scoped hors portée du Role Jenkins
                 sh 'kubectl apply -f k8s/configmap.yaml'
-                sh 'kubectl apply -f k8s/secrets.yaml'
+
+                // Secrets créés depuis Jenkins Credentials — jamais en clair dans Git
+                withCredentials([
+                    string(credentialsId: 'app-key',     variable: 'APP_KEY'),
+                    string(credentialsId: 'db-password', variable: 'DB_PASSWORD')
+                ]) {
+                    sh """
+                        kubectl create secret generic app-secrets \
+                            --from-literal=APP_KEY="\${APP_KEY}" \
+                            --from-literal=DB_PASSWORD="\${DB_PASSWORD}" \
+                            -n ${K8S_NAMESPACE} \
+                            --dry-run=client -o yaml | kubectl apply -f -
+                    """
+                }
 
                 // 2. Base de données
                 sh 'kubectl apply -f k8s/postgres/postgres.yaml'
