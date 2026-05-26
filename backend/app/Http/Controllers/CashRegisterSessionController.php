@@ -147,16 +147,6 @@ class CashRegisterSessionController extends Controller
         event(new CashRegisterSessionOpened($session));
 
         return response()->json($session, Response::HTTP_CREATED);
-
-   public function store(Request $request)
-{
-    /** @var \App\Models\User|null $user */
-    $user = auth()->guard('api')->user();
-    
-    // 1. Vérification des permissions de base
-    if (!$user || !$user->hasPermissionTo('create.cash_register_sessions', 'api')) {
-        abort(403, 'This action is unauthorized.');
- 85008940c5a48f81fac431603537bfe947e1baad
     }
 
     /**

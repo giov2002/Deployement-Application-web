@@ -372,7 +372,6 @@ public function validatePendingOrder(Request $request, $saleId)
             return response()->json(['message' => 'Utilisateur non authentifié.'], 401);
         }
 
-<<<<<<< HEAD
         if (!$user->hasPermissionTo('create.sales', 'api')) {
             return response()->json(['message' => 'Vous n\'avez pas la permission de créer une vente.'], 403);
         }
@@ -425,14 +424,6 @@ public function validatePendingOrder(Request $request, $saleId)
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
         }
-=======
-    try {
-        $sale = $saleService->createSale($request->validated(), $user);
-
-        return response()->json($sale, 201);
-    } catch (\Exception $e) {
-        return response()->json(['message' => $e->getMessage()], 500);
->>>>>>> 85008940c5a48f81fac431603537bfe947e1baad
     }
     /**
      * POST /api/sales/pending-orders
