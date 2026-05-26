@@ -46,29 +46,26 @@ pipeline {
         stage('Build Images') {
             steps {
                 echo "Build des images Docker..."
-                parallel(
-                    // Build backend
-                    "Backend": {
-                        sh """
-                            docker build \
-                                -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                                -t ${BACKEND_IMAGE}:latest \
-                                ./backend
-                        """
-                        // On tag avec IMAGE_TAG ET latest
-                        // IMAGE_TAG pour le versioning
-                        // latest pour la commodité en dev
-                    },
-                    // Build frontend
-                    "Frontend": {
-                        sh """
-                            docker build \
-                                -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
-                                -t ${FRONTEND_IMAGE}:latest \
-                                ./frontend
-                        """
-                    }
-                )
+                script {
+                    parallel(
+                        "Backend": {
+                            sh """
+                                docker build \
+                                    -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                                    -t ${BACKEND_IMAGE}:latest \
+                                    ./backend
+                            """
+                        },
+                        "Frontend": {
+                            sh """
+                                docker build \
+                                    -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                                    -t ${FRONTEND_IMAGE}:latest \
+                                    ./frontend
+                            """
+                        }
+                    )
+                }
             }
         }
 
