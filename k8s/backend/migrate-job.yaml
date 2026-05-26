@@ -81,8 +81,8 @@ spec:
       # --------------------------------------------------------
       containers:
         - name: migrate
-          image: backend:v2
-          imagePullPolicy: Never   # Même policy que ton Deployment
+          image: giovanni09/backend:latest
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c

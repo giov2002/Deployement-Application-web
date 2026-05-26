@@ -10,9 +10,9 @@ pipeline {
         // Namespace Kubernetes cible
         K8S_NAMESPACE = 'devops-app'
 
-        // Noms des images Docker
-        BACKEND_IMAGE  = 'backend'
-        FRONTEND_IMAGE = 'frontend'
+        // Noms des images Docker — préfixe Docker Hub obligatoire
+        BACKEND_IMAGE  = 'giovanni09/backend'
+        FRONTEND_IMAGE = 'giovanni09/frontend'
 
         // Version des images — utilise le numéro de build Jenkins
         // Chaque build a une version unique
@@ -174,7 +174,32 @@ pipeline {
         }
 
         // ============================================================
-        // STAGE 5 — Déploiement Kubernetes
+        // STAGE 5 — Push vers Docker Hub
+        // ============================================================
+        // On push UNIQUEMENT les images qui ont passé les tests
+        // Les credentials Docker Hub sont stockés dans Jenkins
+        // et jamais en clair dans ce fichier
+        stage('Push Images') {
+            steps {
+                echo "Push des images vers Docker Hub..."
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                        echo "\${DOCKER_PASS}" | docker login -u "\${DOCKER_USER}" --password-stdin
+                        docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
+                        docker push ${BACKEND_IMAGE}:latest
+                        docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                        docker push ${FRONTEND_IMAGE}:latest
+                    """
+                }
+            }
+        }
+
+        // ============================================================
+        // STAGE 6 — Déploiement Kubernetes
         // ============================================================
         // On applique tous les manifests K8s dans le bon ordre
         // kubectl apply = crée si inexistant, met à jour si existant
@@ -218,7 +243,7 @@ pipeline {
         }
 
         // ============================================================
-        // STAGE 6 — Attente que les pods soient prêts
+        // STAGE 7 — Attente que les pods soient prêts
         // ============================================================
         // kubectl rollout status attend que le déploiement
         // soit complètement terminé avant de continuer
@@ -247,7 +272,7 @@ pipeline {
         }
 
         // ============================================================
-        // STAGE 7 — Migrations Laravel
+        // STAGE 8 — Migrations Laravel
         // ============================================================
         // Les migrations s'exécutent APRÈS que les pods soient prêts
         // On est certain que le backend est disponible
@@ -294,6 +319,8 @@ pipeline {
             // Slack, email, etc.
         }
         always {
+            // Déconnexion Docker Hub — ne jamais laisser de session ouverte
+            sh 'docker logout || true'
             // Nettoyage des images Docker non utilisées
             // pour éviter de saturer le disque du node Jenkins
             sh 'docker image prune -f || true'

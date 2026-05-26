@@ -104,8 +104,8 @@ spec:
     spec:
       initContainers:
         - name: init-app
-          image: backend:v2
-          imagePullPolicy: Never
+          image: giovanni09/backend:latest
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
@@ -125,8 +125,8 @@ spec:
         # PHP-FPM
         # --------------------------------------------------------
         - name: php-fpm
-          image: backend:v2
-          imagePullPolicy: Never
+          image: giovanni09/backend:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 9000
           envFrom:
