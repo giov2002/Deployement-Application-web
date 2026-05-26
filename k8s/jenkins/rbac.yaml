@@ -139,6 +139,18 @@ rules:
       - list
 
   # --------------------------------------------------------
+  # PersistentVolumeClaims — nécessaire pour kubectl apply postgres.yaml
+  # --------------------------------------------------------
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - patch
+
+  # --------------------------------------------------------
   # Jobs — nécessaire pour le migrate-job.yaml
   # --------------------------------------------------------
   - apiGroups: ["batch"]
