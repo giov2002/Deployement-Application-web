@@ -1,22 +1,11 @@
 apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: postgres-pvc
-  namespace: devops-app
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
 kind: Service
 metadata:
   name: postgres-service
   namespace: devops-app
 spec:
   type: ClusterIP
+  clusterIP: None
   selector:
     app: postgres
   ports:
@@ -24,11 +13,12 @@ spec:
       targetPort: 5432
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: postgres
   namespace: devops-app
 spec:
+  serviceName: postgres-service
   replicas: 1
   selector:
     matchLabels:
@@ -57,6 +47,8 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: DB_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           resources:
             requests:
               memory: "256Mi"
@@ -89,8 +81,15 @@ spec:
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
-              subPath: postgres
-      volumes:
-        - name: postgres-storage
-          persistentVolumeClaim:
-            claimName: postgres-pvc
+
+  # StatefulSet gère son propre PVC par pod
+  # postgres-storage-postgres-0 → toujours attaché à postgres-0
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi

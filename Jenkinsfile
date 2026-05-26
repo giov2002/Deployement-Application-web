@@ -232,7 +232,7 @@ pipeline {
 
                 // 3. Attendre que Postgres soit prêt
                 sh """
-                    kubectl rollout status deployment/postgres \
+                    kubectl rollout status statefulset/postgres \
                         -n ${K8S_NAMESPACE} \
                         --timeout=${ROLLOUT_TIMEOUT}
                 """

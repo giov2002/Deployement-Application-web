@@ -36,12 +36,23 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs:
-      - get        # Lire l'état d'un deployment
-      - list       # Lister tous les deployments
-      - watch      # Surveiller les changements (kubectl rollout status)
-      - update     # Mettre à jour un deployment
-      - patch      # Modifier partiellement un deployment
-                   # kubectl rollout restart utilise patch
+      - get
+      - list
+      - watch
+      - update
+      - patch
+
+  # --------------------------------------------------------
+  # StatefulSets — nécessaire pour PostgreSQL
+  # --------------------------------------------------------
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
 
   # --------------------------------------------------------
   # Pods — Jenkins doit pouvoir exécuter des commandes
@@ -160,6 +171,7 @@ rules:
     verbs:
       - get
       - list
+      - watch
       - create
       - delete
       - patch
