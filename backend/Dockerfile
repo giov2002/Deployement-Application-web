@@ -29,6 +29,13 @@ COPY . /var/www
 # Copier .env.example en .env pour que artisan fonctionne
 RUN cp .env.example .env
 
+# Créer les dossiers Laravel nécessaires (gitignorés, absents du repo)
+RUN mkdir -p storage/framework/views \
+             storage/framework/cache \
+             storage/framework/sessions \
+             storage/logs \
+             bootstrap/cache
+
 # Exécuter les scripts post-installation et générer la clé
 RUN composer run-script post-autoload-dump || true \
     && php artisan key:generate --ansi || true \

@@ -38,6 +38,7 @@ rules:
     verbs:
       - get        # Lire l'état d'un deployment
       - list       # Lister tous les deployments
+      - watch      # Surveiller les changements (kubectl rollout status)
       - update     # Mettre à jour un deployment
       - patch      # Modifier partiellement un deployment
                    # kubectl rollout restart utilise patch
@@ -137,6 +138,7 @@ rules:
     verbs:
       - get
       - list
+      - watch
 
   # --------------------------------------------------------
   # PersistentVolumeClaims — nécessaire pour kubectl apply postgres.yaml
