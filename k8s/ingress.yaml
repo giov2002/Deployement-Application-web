@@ -18,9 +18,8 @@ metadata:
     # Annotations nginx-ingress
     # --------------------------------------------------------
 
-    # Redirection HTTP → HTTPS désactivée (pas de TLS configuré)
-    # Réactiver quand cert-manager + domaine seront en place
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Redirection HTTP → HTTPS automatique
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 
     # Taille max des requêtes (upload de fichiers, images produits)
     # Par défaut nginx limite à 1MB — trop petit pour une app POS
@@ -31,13 +30,9 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
 
-    # --------------------------------------------------------
-    # Annotation pour cert-manager (TLS automatique)
-    # --------------------------------------------------------
-    # cert-manager génère et renouvelle automatiquement
-    # les certificats SSL via Let's Encrypt
-    # Décommenter quand cert-manager est installé dans le cluster
-    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # cert-manager génère le certificat automatiquement
+    # selfsigned-issuer pour minikube → letsencrypt-prod en production
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
 
 spec:
   ingressClassName: nginx      # Utilise le controller nginx
@@ -47,25 +42,19 @@ spec:
   # ============================================================
   # TLS — HTTPS
   # ============================================================
-  # Décommenter et adapter quand tu as un vrai domaine
-  # et cert-manager installé
-  #
-  # tls:
-  #   - hosts:
-  #       - monapp.mondomaine.com
-  #     secretName: app-tls-secret   # cert-manager crée ce secret
-  #                                  # automatiquement
+  # cert-manager crée et gère le secret automatiquement
+  # En production : remplacer pizza-pos.local par le vrai domaine
+  tls:
+    - hosts:
+        - pizza-pos.local
+      secretName: app-tls-secret
 
   # ============================================================
   # Règles de routing
   # ============================================================
   rules:
-      # --------------------------------------------------------
-      # Sans domaine pour l'instant (dev/local)
-      # --------------------------------------------------------
-      # En production, remplacer par :
-      # - host: monapp.mondomaine.com
-    - http:
+    - host: pizza-pos.local
+      http:
         paths:
           # --------------------------------------------------------
           # /api → Backend Laravel
