@@ -182,43 +182,38 @@ pipeline {
             steps {
                 echo "Déploiement sur Kubernetes..."
 
-                // 1. Namespace en premier — tout le reste en dépend
-                sh 'kubectl apply -f k8s/namespace.yaml'
-
-                // 2. RBAC — permissions Jenkins
-                sh 'kubectl apply -f k8s/jenkins/rbac.yaml'
-
-                // 3. ConfigMap et Secrets — les apps en ont besoin
+                // 1. ConfigMap et Secrets — les apps en ont besoin
+                // NOTE : namespace et RBAC sont appliqués UNE SEULE FOIS
+                // manuellement (kubectl apply -f k8s/namespace.yaml et rbac.yaml)
+                // car namespace = ressource cluster-scoped hors portée du Role Jenkins
                 sh 'kubectl apply -f k8s/configmap.yaml'
                 sh 'kubectl apply -f k8s/secrets.yaml'
 
-                // 4. Base de données en premier
-                // Le backend attend une DB disponible
+                // 2. Base de données
                 sh 'kubectl apply -f k8s/postgres/postgres.yaml'
 
-                // 5. Attendre que Postgres soit prêt
-                // avant de déployer le backend
+                // 3. Attendre que Postgres soit prêt
                 sh """
                     kubectl rollout status deployment/postgres \
                         -n ${K8S_NAMESPACE} \
                         --timeout=${ROLLOUT_TIMEOUT}
                 """
 
-                // 6. Backend et Frontend
+                // 4. Mettre à jour le tag d'image dans les manifests
+                // sed remplace le tag hardcodé par la version du build en cours
+                // Un seul rollout, directement avec la bonne image
+                sh """
+                    sed -i 's|image: ${BACKEND_IMAGE}:.*|image: ${BACKEND_IMAGE}:${IMAGE_TAG}|g' k8s/backend/backend.yaml
+                    sed -i 's|image: ${BACKEND_IMAGE}:.*|image: ${BACKEND_IMAGE}:${IMAGE_TAG}|g' k8s/backend/migrate-job.yaml
+                    sed -i 's|image: ${FRONTEND_IMAGE}:.*|image: ${FRONTEND_IMAGE}:${IMAGE_TAG}|g' k8s/frontend/frontend.yaml
+                """
+
+                // 5. Backend et Frontend — déjà avec le bon tag d'image
                 sh 'kubectl apply -f k8s/backend/backend.yaml'
                 sh 'kubectl apply -f k8s/frontend/frontend.yaml'
 
-                // 7. Ingress en dernier
-                // Les services doivent exister avant l'Ingress
+                // 6. Ingress en dernier
                 sh 'kubectl apply -f k8s/ingress.yaml'
-
-                // 8. Forcer le redéploiement avec les nouvelles images
-                sh """
-                    kubectl rollout restart deployment/backend \
-                        -n ${K8S_NAMESPACE}
-                    kubectl rollout restart deployment/frontend \
-                        -n ${K8S_NAMESPACE}
-                """
             }
         }
 
@@ -260,17 +255,19 @@ pipeline {
         stage('Migrate') {
             steps {
                 echo "Exécution des migrations Laravel..."
+                // Utilise un Job K8s dédié plutôt que kubectl exec :
+                // - attend que Postgres soit prêt avant de lancer
+                // - retente automatiquement en cas d'échec (backoffLimit: 2)
+                // - traçable avec : kubectl get jobs -n devops-app
                 sh """
-                    kubectl exec \
-                        -n ${K8S_NAMESPACE} \
-                        deployment/backend \
-                        -c php-fpm \
-                        -- php artisan migrate --force
+                    kubectl delete job backend-migrate \
+                        -n ${K8S_NAMESPACE} --ignore-not-found
+                    kubectl apply -f k8s/backend/migrate-job.yaml
+                    kubectl wait --for=condition=complete \
+                        --timeout=${ROLLOUT_TIMEOUT} \
+                        job/backend-migrate \
+                        -n ${K8S_NAMESPACE}
                 """
-                // -c php-fpm = on exécute dans le container php-fpm
-                // et non dans nginx
-                // --force = nécessaire en production
-                // sans --force Laravel demande confirmation
             }
         }
     }

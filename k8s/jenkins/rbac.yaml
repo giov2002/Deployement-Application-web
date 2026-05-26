@@ -137,6 +137,19 @@ rules:
     verbs:
       - get
       - list
+
+  # --------------------------------------------------------
+  # Jobs — nécessaire pour le migrate-job.yaml
+  # --------------------------------------------------------
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs:
+      - get
+      - list
+      - create
+      - delete
+      - patch
+      - update
 ---
 # ============================================================
 # ROLEBINDING — Lier le Role au ServiceAccount

@@ -1,8 +1,6 @@
-vendor
-node_modules
 .env
-storage/*.key
-storage/*.sqlite
 .git
-.gitignore
-docker-compose.yml
+node_modules
+vendor
+*.log
+.DS_Store

@@ -4,13 +4,12 @@ metadata:
   name: frontend-service
   namespace: devops-app
 spec:
+  type: ClusterIP
   selector:
     app: frontend
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30080
-  type: NodePort
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -18,7 +17,7 @@ metadata:
   name: frontend
   namespace: devops-app
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: frontend
@@ -33,3 +32,24 @@ spec:
           imagePullPolicy: Never
           ports:
             - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3

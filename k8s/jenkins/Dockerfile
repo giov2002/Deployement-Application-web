@@ -16,4 +16,4 @@ RUN usermod -aG docker jenkins
 
 RUN git config --global --add safe.directory '*'
 
-USER root
+USER jenkins

@@ -1,20 +1,94 @@
+# ============================================================
+# INGRESS — Point d'entrée unique de l'application
+# ============================================================
+# L'Ingress est le "chef d'orchestre" du trafic entrant
+# Il reçoit toutes les requêtes HTTP/HTTPS de l'extérieur
+# et les route vers le bon Service selon le path
+#
+# Flux :
+# Internet → Ingress Controller (nginx) → Ingress rules → Service → Pod
+# ============================================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: app-ingress
   namespace: devops-app
+  annotations:
+    # --------------------------------------------------------
+    # Annotations nginx-ingress
+    # --------------------------------------------------------
+
+    # Redirection HTTP → HTTPS désactivée (pas de TLS configuré)
+    # Réactiver quand cert-manager + domaine seront en place
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+    # Taille max des requêtes (upload de fichiers, images produits)
+    # Par défaut nginx limite à 1MB — trop petit pour une app POS
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+
+    # Timeout pour les requêtes longues
+    # Les migrations ou gros rapports peuvent prendre du temps
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+
+    # --------------------------------------------------------
+    # Annotation pour cert-manager (TLS automatique)
+    # --------------------------------------------------------
+    # cert-manager génère et renouvelle automatiquement
+    # les certificats SSL via Let's Encrypt
+    # Décommenter quand cert-manager est installé dans le cluster
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
 spec:
-  ingressClassName: nginx
+  ingressClassName: nginx      # Utilise le controller nginx
+                               # doit correspondre à ce qui est
+                               # installé dans ton cluster
+
+  # ============================================================
+  # TLS — HTTPS
+  # ============================================================
+  # Décommenter et adapter quand tu as un vrai domaine
+  # et cert-manager installé
+  #
+  # tls:
+  #   - hosts:
+  #       - monapp.mondomaine.com
+  #     secretName: app-tls-secret   # cert-manager crée ce secret
+  #                                  # automatiquement
+
+  # ============================================================
+  # Règles de routing
+  # ============================================================
   rules:
+      # --------------------------------------------------------
+      # Sans domaine pour l'instant (dev/local)
+      # --------------------------------------------------------
+      # En production, remplacer par :
+      # - host: monapp.mondomaine.com
     - http:
         paths:
+          # --------------------------------------------------------
+          # /api → Backend Laravel
+          # --------------------------------------------------------
+          # IMPORTANT : /api doit être AVANT /
+          # car l'Ingress évalue les règles dans l'ordre
+          # Si / est en premier, il intercepte tout
+          # y compris /api → le backend ne reçoit jamais rien
           - path: /api
-            pathType: Prefix
+            pathType: Prefix         # Prefix = /api, /api/products,
+                                     # /api/users... tout ce qui commence
+                                     # par /api
             backend:
               service:
                 name: backend-service
                 port:
                   number: 80
+
+          # --------------------------------------------------------
+          # / → Frontend Vue.js
+          # --------------------------------------------------------
+          # Intercepte tout ce qui n'est pas /api
+          # Vue Router gère ensuite le routing côté client
           - path: /
             pathType: Prefix
             backend:

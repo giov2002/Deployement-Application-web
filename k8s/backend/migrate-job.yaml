@@ -1,0 +1,106 @@
+# ============================================================
+# JOB DE MIGRATION LARAVEL
+# ============================================================
+# Ce Job exécute `php artisan migrate` automatiquement.
+#
+# Pourquoi un Job et pas un initContainer dans le Deployment ?
+# - Un initContainer s'exécute à CHAQUE démarrage de pod
+#   → race condition si plusieurs pods démarrent en même temps
+#   → ralentit chaque restart
+# - Un Job s'exécute UNE seule fois par déploiement
+#   → idempotent, sûr, traçable dans `kubectl get jobs`
+#
+# Comment l'utiliser :
+#   kubectl delete job backend-migrate -n devops-app --ignore-not-found
+#   kubectl apply -f k8s/backend/migrate-job.yaml
+#   kubectl wait --for=condition=complete --timeout=120s \
+#     job/backend-migrate -n devops-app
+#   kubectl logs -n devops-app job/backend-migrate
+# ============================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backend-migrate
+  namespace: devops-app
+  labels:
+    app: backend-migrate
+    component: migration
+spec:
+  # Si le Job échoue, on retente 2 fois avant d'abandonner
+  backoffLimit: 2
+
+  # Auto-cleanup : le Job se supprime tout seul 10 min après succès
+  # Évite l'accumulation de Jobs terminés dans le cluster
+  ttlSecondsAfterFinished: 600
+
+  # Timeout global : si la migration dure plus de 5 min, on tue
+  activeDeadlineSeconds: 300
+
+  template:
+    metadata:
+      labels:
+        app: backend-migrate
+        component: migration
+    spec:
+      restartPolicy: OnFailure
+
+      # --------------------------------------------------------
+      # InitContainer : attendre que Postgres soit prêt
+      # --------------------------------------------------------
+      # Sans ça, si Postgres met du temps à démarrer (ou redémarre),
+      # le Job échoue avec "Connection refused" et consomme un backoff
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              echo "Attente de Postgres sur $DB_HOST:$DB_PORT..."
+              until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME"; do
+                echo "  ↳ pas prêt, retry dans 2s"
+                sleep 2
+              done
+              echo "✓ Postgres est prêt"
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+
+      # --------------------------------------------------------
+      # Container principal : la migration
+      # --------------------------------------------------------
+      containers:
+        - name: migrate
+          image: backend:v2
+          imagePullPolicy: Never   # Même policy que ton Deployment
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "==> php artisan migrate --force"
+              php artisan migrate --force
+              echo ""
+              echo "==> Migrations terminées avec succès"
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

@@ -7,8 +7,8 @@ data:
   DB_CONNECTION: pgsql
   DB_HOST: postgres-service
   DB_PORT: "5432"
-  DB_DATABASE: appdb
-  DB_USERNAME: appuser
-  APP_ENV: local
-  APP_DEBUG: "true"
-  APP_URL: http://localhost:8000
+  DB_DATABASE: pos_system
+  DB_USERNAME: giovanni
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_URL: http://localhost

@@ -1,3 +1,6 @@
+# ============================================================
+# NGINX CONFIG — avec endpoint /nginx-health pour la liveness
+# ============================================================
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,28 +12,68 @@ data:
         listen 80;
         root /var/www/public;
         index index.php;
+
+        # --------------------------------------------------------
+        # Endpoint de healthcheck nginx
+        # --------------------------------------------------------
+        # Ne touche PAS à PHP, ne touche PAS à la DB.
+        # Renvoie juste 200 si nginx tourne.
+        # Utilisé par la livenessProbe nginx.
+        location = /nginx-health {
+            access_log off;        # pas de spam dans les logs
+            return 200 "ok\n";
+            add_header Content-Type text/plain;
+        }
+
+        # --------------------------------------------------------
+        # Endpoint de healthcheck applicatif (Laravel /up)
+        # --------------------------------------------------------
+        # Laravel 11 expose automatiquement /up qui renvoie 200
+        # si l'app boot correctement (sans toucher à la DB).
+        # Utilisé par la readinessProbe nginx.
+        # On ne définit rien de spécial ici, /up est servi par PHP
+        # via la règle générique ci-dessous.
+
         location / {
             try_files $uri $uri/ /index.php?$query_string;
         }
+
         location ~ \.php$ {
             fastcgi_pass localhost:9000;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
             include fastcgi_params;
+
+            # Timeouts raisonnables pour éviter qu'une requête bloquée
+            # ne fasse échouer les healthchecks suivants
+            fastcgi_connect_timeout 5s;
+            fastcgi_read_timeout 30s;
+            fastcgi_send_timeout 30s;
+        }
+
+        location ~ /\.(?!well-known).* {
+            deny all;
         }
     }
 ---
+# ============================================================
+# SERVICE BACKEND (inchangé)
+# ============================================================
 apiVersion: v1
 kind: Service
 metadata:
   name: backend-service
   namespace: devops-app
 spec:
+  type: ClusterIP
   selector:
     app: backend
   ports:
     - port: 80
       targetPort: 80
 ---
+# ============================================================
+# DEPLOYMENT BACKEND — probes corrigées
+# ============================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,12 +84,46 @@ spec:
   selector:
     matchLabels:
       app: backend
+
+  # --------------------------------------------------------
+  # Stratégie de rolling update
+  # --------------------------------------------------------
+  # maxUnavailable: 0 → toujours au moins 1 pod up pendant l'update
+  # maxSurge: 1       → on peut avoir temporairement 2 pods
+  # Résultat : zéro downtime
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
   template:
     metadata:
       labels:
         app: backend
     spec:
+      initContainers:
+        - name: init-app
+          image: backend:v2
+          imagePullPolicy: Never
+          command:
+            - sh
+            - -c
+            - |
+              echo "Copie des fichiers Laravel vers le volume partagé..."
+              cp -r /var/www/. /app-data/
+              # Permissions correctes pour storage et bootstrap/cache
+              chmod -R 775 /app-data/storage /app-data/bootstrap/cache
+              chown -R 33:33 /app-data/storage /app-data/bootstrap/cache
+              echo "Copie terminée."
+          volumeMounts:
+            - name: app-files
+              mountPath: /app-data
+
       containers:
+        # --------------------------------------------------------
+        # PHP-FPM
+        # --------------------------------------------------------
         - name: php-fpm
           image: backend:v2
           imagePullPolicy: Never
@@ -57,15 +134,89 @@ spec:
                 name: app-config
             - secretRef:
                 name: app-secrets
+          volumeMounts:
+            - name: app-files
+              mountPath: /var/www
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          # Liveness : process FPM vivant ? (TCP socket, pas d'exécution PHP)
+          livenessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Readiness : FPM accepte les connexions ?
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+        # --------------------------------------------------------
+        # NGINX — probes CORRIGÉES
+        # --------------------------------------------------------
         - name: nginx
           image: nginx:alpine
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
           volumeMounts:
+            - name: app-files
+              mountPath: /var/www
             - name: nginx-config
               mountPath: /etc/nginx/conf.d
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+
+          # --------------------------------------------------------
+          # Liveness : "nginx tourne-t-il ?"
+          # --------------------------------------------------------
+          # /nginx-health ne touche PAS à PHP ni à la DB
+          # → un bug Laravel ne tuera plus jamais nginx
+          livenessProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # --------------------------------------------------------
+          # Readiness : "nginx peut-il servir Laravel ?"
+          # --------------------------------------------------------
+          # /up est l'endpoint healthcheck natif de Laravel 11
+          # Il vérifie que l'app boot, SANS toucher à la DB
+          # Si Laravel est cassé → on retire le pod du load balancer
+          # mais on ne le tue PAS (pas de CrashLoop)
+          readinessProbe:
+            httpGet:
+              path: /up
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
       volumes:
+        - name: app-files
+          emptyDir: {}
         - name: nginx-config
           configMap:
             name: nginx-config
