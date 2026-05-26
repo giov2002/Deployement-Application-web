@@ -138,6 +138,8 @@ pipeline {
                 // pg_isready = on attend exactement le temps nécessaire
 
                 // Lancer les tests
+                // PHPUnit 11 retourne exit code 1 pour warnings ET echecs
+                // On capture la sortie pour distinguer les vrais echecs des warnings
                 sh """
                     docker run --rm \
                         --network test-net-${BUILD_NUMBER} \
@@ -150,11 +152,12 @@ pipeline {
                         -e DB_USERNAME=postgres \
                         -e DB_PASSWORD=postgres_test \
                         ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                        php vendor/bin/phpunit --testdox
+                        php vendor/bin/phpunit --testdox \
+                        > /tmp/phpunit-${BUILD_NUMBER}.txt 2>&1 || true
+                    cat /tmp/phpunit-${BUILD_NUMBER}.txt
+                    grep -qE 'Failures: [1-9]|Errors: [1-9]' /tmp/phpunit-${BUILD_NUMBER}.txt \
+                        && exit 1 || exit 0
                 """
-                // Note : APP_KEY et DB_PASSWORD sont encore en clair ici
-                // La prochaine étape sera de les mettre dans
-                // Jenkins Credentials Store
             }
 
             // Nettoyage après les tests
